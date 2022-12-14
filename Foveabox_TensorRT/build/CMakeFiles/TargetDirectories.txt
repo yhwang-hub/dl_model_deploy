@@ -1,3 +1,0 @@
-/home/uisee/disk/DL_Model_Deploy/dolly_monitor_TensorRT/build/CMakeFiles/edit_cache.dir
-/home/uisee/disk/DL_Model_Deploy/dolly_monitor_TensorRT/build/CMakeFiles/rebuild_cache.dir
-/home/uisee/disk/DL_Model_Deploy/dolly_monitor_TensorRT/build/CMakeFiles/Foveabox.dir
