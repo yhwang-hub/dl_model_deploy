@@ -1,0 +1,28 @@
+/*Linker script file which sets all dynamic code*/
+  
+SECTIONS {
+  
+  /*Setting up shave slices memory with absolute addresses*/
+  . = 0x1F000000;
+  .dyn.text ALIGN(4) : { 
+        *(S.text*)
+        *(S.__TEXT__sect)
+        *(S.__MAIN__sect) 
+        *(S.init*)
+  }
+  .dyn.rodata ALIGN(4) : {
+      *(S.rodata*)
+  }
+  /* As a workaround for a bug with LDO instructions over window
+     boundaries, we create a 64 byte safe margin at the start of
+     the data window to massively lower the risk of this happening */
+  . = 0x1D000040;
+.dyn.data : { 
+        *(S.data*)
+        *(S.__DATA__sect*)
+        *(S.__STACK__sect*)
+        *(S.__static_data*)
+        *(S.__HEAP__sect*)
+        *(S.__T__*)
+  }
+}

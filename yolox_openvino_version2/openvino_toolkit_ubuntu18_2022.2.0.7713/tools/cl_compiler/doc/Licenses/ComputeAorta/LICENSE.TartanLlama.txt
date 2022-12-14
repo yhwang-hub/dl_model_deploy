@@ -1,0 +1,9 @@
+Copyright (C) Codeplay Software Limited. All Rights Reserved.
+
+For licensing information, see the applicable license agreement under which
+this project was delivered.
+
+The optional and expected implementations contain files derived from
+https://github.com/TartanLlama/optional and
+https://github.com/TartanLlama/expected held under the Creative Commons CC0 1.0
+Universal license (see optional.LICENSE.txt and expected.LICENSE.txt).

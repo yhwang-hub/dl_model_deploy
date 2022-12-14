@@ -1,0 +1,1 @@
+openvino-dev[tensorflow]==2022.2.0

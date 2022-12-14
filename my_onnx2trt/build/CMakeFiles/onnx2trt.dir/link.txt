@@ -1,0 +1,1 @@
+/usr/bin/c++  -g   CMakeFiles/onnx2trt.dir/main.cpp.o  -o onnx2trt  -Wl,-rpath,/sdb/wyh/TensorRT-7.2.1.6/lib /usr/local/cuda/lib64/libcudart_static.a -lpthread -ldl /usr/lib/x86_64-linux-gnu/librt.so /sdb/wyh/TensorRT-7.2.1.6/lib/libnvinfer.so /sdb/wyh/TensorRT-7.2.1.6/lib/libnvonnxparser.so 

@@ -1,0 +1,10 @@
+clc version 1.60.1 (LLVM 12.0.0) linux64 release for OpenVino
+--------------------------------------------------------------------
+Key changes:
+    - The clc-kmb compiler is based on intel-innersource/applications.vpu.tools.shave-computeaorta movidius_develop branch (commit id 2972fc8)
+    - The moviCompile snapshot used for the build corresponds to tag llvm-12
+    - This build provides a common clc binary for MX and KMB. It support the existing command line option -d <device name>, where device name can be ma2x8x for MyriadX or 3010xx for Keem Bay
+    - The build uses the llvm 12.0.0 based ComputeAorta and moviCompile back-end
+
+
+Date: 25/08/2022

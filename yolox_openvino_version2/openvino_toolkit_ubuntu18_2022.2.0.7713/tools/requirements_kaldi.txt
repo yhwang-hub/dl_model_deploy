@@ -1,0 +1,1 @@
+openvino-dev[kaldi]==2022.2.0
