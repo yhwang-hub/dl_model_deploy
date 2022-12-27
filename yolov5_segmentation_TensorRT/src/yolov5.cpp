@@ -2,8 +2,8 @@
 #include "../include/yolov5.h"
 #include "../include/common.h"
 
-#define INPUT_DEBUG
-#define OUTPUT_DEBUG
+// #define INPUT_DEBUG
+// #define OUTPUT_DEBUG
 
 static const int DEVICE  = 0;
 
@@ -119,8 +119,6 @@ void Yolov5_Detector::destroy_context()
         CHECK(cudaFreeHost(det_output_cpu));
     if(seg_output_cpu)
         CHECK(cudaFreeHost(seg_output_cpu));
-    if(stream)
-        cudaStreamDestroy(stream);
 }
 
 Yolov5_Detector::~Yolov5_Detector()
@@ -131,26 +129,6 @@ Yolov5_Detector::~Yolov5_Detector()
 
 void Yolov5_Detector::pre_process(cv::Mat& image)
 {
-#ifdef INPUT_DEBUG    
-    std::string Tensorrt_preprocess_txt_name = "Tensorrt_preprocess.txt";
-    if (access(Tensorrt_preprocess_txt_name.c_str(),0) == 0){
-        if(remove(Tensorrt_preprocess_txt_name.c_str()) == 0){
-            std::cout<<Tensorrt_preprocess_txt_name<<" has been deleted successfuly!"<<std::endl;
-        }
-    }
-    std::ofstream Tensorrt_preprocess;
-    Tensorrt_preprocess.open(Tensorrt_preprocess_txt_name);
-
-    std::string pytorch_preprocess_txt = "../pytorch_preprocess.txt";
-    std::ifstream pytorch_preprocess_data(pytorch_preprocess_txt);
-    std::vector<float>pytorch_preprocess_result;
-    float data;
-    while (pytorch_preprocess_data >> data)
-    {
-        pytorch_preprocess_result.push_back(data);
-    }
-#endif
-
     cv::Mat img = image.clone();
     int w, h, x, y;
 	float r_w = input_w / (image.cols*1.0);
@@ -173,7 +151,6 @@ void Yolov5_Detector::pre_process(cv::Mat& image)
 	padsize.push_back(w);
 	padsize.push_back(y);
 	padsize.push_back(x);
-    std::cout<<"h: "<<h<<", w: "<<w<<std::endl;
 
     cv::Size new_shape = cv::Size(640, 640);
     float width = img.cols;
@@ -182,11 +159,9 @@ void Yolov5_Detector::pre_process(cv::Mat& image)
     r = std::min(r, 1.0f);
     int new_unpadW = int(round(width * r));
     int new_unpadH = int(round(height * r));
-    std::cout<<"new_unpadW:"<<new_unpadW<<", new_unpadH:"<<new_unpadH<<std::endl;
     int dw = new_shape.width - new_unpadW;
     int dh = new_shape.height - new_unpadH;
     dw /= 2, dh /= 2;
-    std::cout<<"dw:"<<dw<<", dh:"<<dh<<std::endl;
     cv::Mat dst;
     cv::resize(img, dst, cv::Size(new_unpadW, new_unpadH), 0, 0, cv::INTER_LINEAR);
     int top = int(round(dh - 0.1));
@@ -194,7 +169,7 @@ void Yolov5_Detector::pre_process(cv::Mat& image)
     int left = int(round(dw - 0.1));
     int right = int(round(dw + 0.1));
     cv::copyMakeBorder(dst, dst, top, bottom, left, right, \
-                    cv::BORDER_CONSTANT, cv::Scalar(114, 114, 114));
+                    cv::BORDER_CONSTANT, cv::Scalar(128, 128, 128));
 
     cv::imwrite("pre_img.jpg", dst);
     int image_area = dst.cols * dst.rows;
@@ -208,22 +183,6 @@ void Yolov5_Detector::pre_process(cv::Mat& image)
         *phost_g++ = pimage[1] / 255.0f;
         *phost_b++ = pimage[2] / 255.0f;
     }
-
-#ifdef INPUT_DEBUG
-    float max_diff = 0.0;
-    for (int i = 0; i < input_buffer_size / sizeof(float); i++)
-    {
-        Tensorrt_preprocess<<host_input[i]<<"\n";
-        float diff = std::abs(host_input[i] - pytorch_preprocess_result[i]);
-        if (diff > max_diff)
-        {
-            std::cout<<i<<", "<<host_input[i]<<", "<<pytorch_preprocess_result[i]<<std::endl;
-            max_diff = diff;
-        }
-        
-    }
-    std::cout<<"preprocess max_diff: "<<max_diff<<std::endl;
-#endif
 
     /* upload input tensor and run inference */
     cudaMemcpyAsync(device_buffers[input_index], host_input, input_buffer_size,
@@ -243,7 +202,6 @@ void Yolov5_Detector::do_detection(cv::Mat& img)
     bool res_ok = true;
     auto t_start1 = std::chrono::high_resolution_clock::now();
     /* Debug device_input on cuda kernel */
-    // context->enqueueV2(&device_buffers[input_index], stream, nullptr);
     context->enqueue(batchsize, device_buffers, stream, nullptr);
     auto t_end1 = std::chrono::high_resolution_clock::now();
     float total_inf1 = std::chrono::duration<float, std::milli>(t_end1 - t_start1).count();
@@ -261,28 +219,8 @@ void Yolov5_Detector::post_process(cv::Mat& img)
 	CHECK(cudaMemcpyAsync(seg_output_cpu, device_buffers[seg_output_index], \
                         seg_output_buffer_size, \
                         cudaMemcpyDeviceToHost, stream));
-
-#ifdef OUTPUT_DEBUG    
-    std::string pytorch_result_txt = "../pred_result.txt";
-    std::ifstream pytorch_result_data(pytorch_result_txt);
-    std::vector<float>pred_result;
-    float data;
-    while (pytorch_result_data >> data)
-    {
-        pred_result.push_back(data);
-    }
-    float max_diff = 0.0;
-    for (int i = 0; i < det_output_buffer_size / sizeof(float); i++)
-    {
-        float diff = std::abs(pred_result[i] - det_output_cpu[i]);
-        if (diff > max_diff)
-        {
-            std::cout<<i<<", "<<pred_result[i]<<", "<<det_output_cpu[i]<<std::endl;
-            max_diff = diff;
-        }
-    }
-    std::cout<<"pred result max_diff: "<<max_diff<<std::endl;
-#endif
+    CHECK(cudaStreamSynchronize(stream));
+    CHECK(cudaStreamDestroy(stream));
 
     std::vector<int> classIds;
 	std::vector<float> confidences;
@@ -295,6 +233,7 @@ void Yolov5_Detector::post_process(cv::Mat& img)
 	float ratio_w = (float)img.cols / neww;
 
 	int net_width = classes_num + 5 + seg_channels;
+    // 检测结果 1 * 25200 * 117
 	float* pdata = det_output_cpu;
 	for (int j = 0; j < num_bbox; ++j)
     {
@@ -306,8 +245,10 @@ void Yolov5_Detector::post_process(cv::Mat& img)
 			double max_class_socre;
 			cv::minMaxLoc(scores, 0, &max_class_socre, 0, &classIdPoint);
 			max_class_socre = (float)max_class_socre;
+
 			if (max_class_socre >= confThreshold)
             {
+                // 每个box的mask系数
 				std::vector<float> temp_proto(pdata + 5 + classes_num, pdata + net_width);
 				picked_proposals.push_back(temp_proto);
 
@@ -325,7 +266,9 @@ void Yolov5_Detector::post_process(cv::Mat& img)
 		}
 		pdata += net_width;
 	}
-    std::cout<<"boxes.size:"<<boxes.size()<<std::endl;
+    std::cout<<"classIds.size: "<<classIds.size()<<std::endl;
+    std::cout<<"confidences.size: "<<confidences.size()<<std::endl;
+    std::cout<<"boxes.size: "<<boxes.size()<<std::endl;
 	std::vector<int> nms_result;
 	cv::dnn::NMSBoxes(boxes, confidences, confThreshold, nmsThreshold, nms_result);
 	std::vector<std::vector<float>> temp_mask_proposals;
@@ -346,9 +289,12 @@ void Yolov5_Detector::post_process(cv::Mat& img)
     std::cout<<"temp_mask_proposals.size:"<<temp_mask_proposals.size()<<std::endl;
 	cv::Mat maskProposals;
 	for (int i = 0; i < temp_mask_proposals.size(); ++i)
-		//std::cout<< Mat(temp_mask_proposals[i]).t().size();
+	{
+        std::cout<< "mask_proposals Mat size: " <<cv::Mat(temp_mask_proposals[i]).t().size() << std::endl;// [32, 1]
 		maskProposals.push_back(cv::Mat(temp_mask_proposals[i]).t());
+    }
 
+    // 原型mask 32 * 160 * 160
 	pdata = seg_output_cpu;
 	std::vector<float> seg_mask(pdata, pdata + seg_channels * seg_width * seg_height);
 	cv::Mat mask_protos = cv::Mat(seg_mask, true);
@@ -362,23 +308,23 @@ void Yolov5_Detector::post_process(cv::Mat& img)
 
 	std::vector<cv::Mat> maskChannels;
 	cv::split(masks, maskChannels);
-	std::cout << maskChannels.size();
-	for (int i = 0; i < output.size(); ++i) 
+	std::cout << "maskChannels.size: " << maskChannels.size() << std::endl;
+	for (int i = 0; i < output.size(); ++i)
     {
 		cv::Mat dest, mask;
-		//sigmoid
+		// sigmoid
 		cv::exp(-maskChannels[i], dest);
-		dest = 1.0 / (1.0 + dest);//160*160
+		dest = 1.0 / (1.0 + dest);// 160*160
 		
 		cv::Rect roi(int((float)padw / input_w * seg_width), int((float)padh / input_h * seg_height), int(seg_width - padw / 2), int(seg_width - padh / 2));
-		//std::cout << roi;
+
 		dest = dest(roi);
 		
 		cv::resize(dest, mask, img.size(), cv::INTER_NEAREST);
 
 		cv::Rect temp_rect = output[i].box;
 		mask = mask(temp_rect) > maskThreshold;
-
+        // 获取原型mask里面目标框的区域
 		output[i].boxMask = mask;
 	}
 
