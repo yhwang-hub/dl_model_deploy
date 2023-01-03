@@ -5,7 +5,11 @@
 
 # 运行
 将使用的部署框架安装好之后按照下面的流程即可完成运行
+
 mkdir build && cd build
+
 cmake ..
+
 make
+
 ./executable_file
