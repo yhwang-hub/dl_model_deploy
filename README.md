@@ -5,7 +5,7 @@
 
 # TensorRT安装
 下载与cuda版本相对应TensorRT(建议下载tar版本)，下载地址：https://developer.nvidia.com/nvidia-tensorrt-download
-![image](https://github.com/yhwang-hub/dl_model_deploy/blob/master/image/TensorRT-tar.jpg)
+![image](https://github.com/yhwang-hub/dl_model_deploy/blob/master/image/TensorRT-tar.png)
 
 直接解压，在~/.bashrc(或者/etc/profile)文件中添加环境变量：
 ```C
