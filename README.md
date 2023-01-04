@@ -1,7 +1,7 @@
+![image](https://github.com/yhwang-hub/dl_model_deploy/blob/master/image/deployment-framework.jpg)
 # dl_model_deploy
 # Introduction
 这个项目是为了记录经典深度学习模型在不同框架(x86)中的部署
-![image](https://github.com/yhwang-hub/dl_model_deploy/blob/master/image/deployment-framework.jpg)
 
 # 环境
 ```C
