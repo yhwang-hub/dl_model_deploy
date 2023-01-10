@@ -5,7 +5,12 @@ yolov5团队在最近一段时间在官方网站又有了新动作，即将发�
 # How to deploy
 
 ## yolov8算法的环境部署
+### 官方教程
 https://colab.research.google.com/github/glenn-jocher/glenn-jocher.github.io/blob/main/tutorial.ipynb#scrollTo=nPZZeNrLCQG6
+### docker环境
+```C++
+docker pull longxiaowyh/yolov5:v1.0
+```
 ## 预训练模型下载
 https://github.com/ultralytics/assets/releases/download/v0.0.0/yolov8s.pt
 ## onnx模型导出
