@@ -10,7 +10,6 @@ CUDA
 OpenCV
 TensorRT
 ONNXRuntime
-NCNN
 OpenVino
 ```
 
