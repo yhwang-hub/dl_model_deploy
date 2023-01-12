@@ -1,5 +1,6 @@
 # Introduction
-因为yolov7算法anchor部分带有大量的五维算子，并且根据之前的部署经验，诸如transpose这类的算子，在很多硬件设备(比如高通8155、地平线J5)上并不支持这些算子运行在其加速硬件部分(比如高通8155的NPU、地平线J5的BPU)上，因此为了做到适配所有硬件，我们需要在导出onnx时将这些算子截断并自己手动实现，这里给出了手动实现的grid部分代码。
+因为yolov7算法anchor部分带有大量的五维算子，如下图所示，并且根据之前的部署经验，诸如transpose这类的算子，在很多硬件设备(比如高通8155、地平线J5)上并不支持这些算子运行在其加速硬件部分(比如高通8155的NPU、地平线J5的BPU)上，因此为了做到适配所有硬件，我们需要在导出onnx时将这些算子截断并自己手动实现，这里给出了手动实现的grid部分代码。
+![image](https://github.com/yhwang-hub/dl_model_deploy/blob/master/yolov7_cutoff_TensorRT/yolov7_grid.png)
 
 # 1.export onnx
 
@@ -10,6 +11,10 @@
 ```C++
 python onnx_cutoff_export.py --weights checkpoints/yolov7.pt --simplify
 ```
+修改后的onnx输出如下所示：
+![image](https://github.com/yhwang-hub/dl_model_deploy/blob/master/yolov7_cutoff_TensorRT/yolov7_cutoff_output1.png)
+![image](https://github.com/yhwang-hub/dl_model_deploy/blob/master/yolov7_cutoff_TensorRT/yolov7_cutoff_output2.png)
+![image](https://github.com/yhwang-hub/dl_model_deploy/blob/master/yolov7_cutoff_TensorRT/yolov7_cutoff_output3.png)
 
 # 2.onnx转TensorRT
 ```C++
