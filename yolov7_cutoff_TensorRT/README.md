@@ -5,6 +5,7 @@
 
 修改yolov7源码中的grid部分如下图所示：
 ![image](https://github.com/yhwang-hub/dl_model_deploy/blob/master/yolov7_cutoff_TensorRT/yolov7_cutoff.png)
+
 使用如下指令导出截断后处理的onnx
 ```C++
 python onnx_cutoff_export.py --weights checkpoints/yolov7.pt --simplify
