@@ -124,66 +124,32 @@ void Yolov8_detector::get_affine_martrix(affine_matrix &afmt,cv::Size &to,cv::Si
     memcpy(afmt.d2i, cv_d2i.ptr<float>(0), sizeof(afmt.d2i));
 }
 
-void Yolov8_detector::pre_process(cv::Mat img)
+void Yolov8_detector::pre_process(cv::Mat image)
 {
-    float width = img.cols;
-    float height = img.rows;
-    float r = std::min(input_w / width, input_h / height);
-    r = std::min(r, 1.0f);
-    int new_unpadW = int(round(width * r));
-    int new_unpadH = int(round(height * r));
-    // std::cout << "new_unpadW:" << new_unpadW << ", new_unpadH:" << new_unpadH << std::endl;
-    int dw = input_w - new_unpadW;
-    int dh = input_h - new_unpadH;
-    dw /= 2, dh /= 2;
-    // std::cout << "dw:" << dw << ", dh:" << dh << std::endl;
-    cv::Mat dst;
-    cv::resize(img, dst, cv::Size(new_unpadW, new_unpadH), 0, 0, cv::INTER_LINEAR);
-    
-    int top = int(round(dh - 0.1));
-    int bottom = int(round(dh + 0.1));
-    int left = int(round(dw - 0.1));
-    int right = int(round(dw + 0.1));
-    cv::copyMakeBorder(dst, dst, top, bottom, left, right, \
-                    cv::BORDER_CONSTANT, cv::Scalar(114, 114, 114));
-
-    std::cout<< "dst shape: [" << dst.cols << ", " << dst.rows << "]"<<std::endl;
-    int image_area = dst.cols * dst.rows;
-    unsigned char* pimage = dst.data;
-    float* phost_b = host_input + image_area * 0;
-    float* phost_g = host_input + image_area * 1;
-    float* phost_r = host_input + image_area * 2;
-    for(int i = 0; i < image_area; ++i, pimage += 3){
-        // 注意这里的顺序rgb调换了
-        *phost_r++ = pimage[0] / 255.0;
-        *phost_g++ = pimage[1] / 255.0;
-        *phost_b++ = pimage[2] / 255.0;
-    }
-
     // float width = img.cols;
     // float height = img.rows;
-    // cv::Size to(input_w, input_w);
-    // cv::Size from(width, height);
-    // affine_matrix afmt;
-    // // get_affine_martrix(afmt, to, from);
-    // // memcpy(affine_matrix_d2i_host, afmt.d2i, sizeof(afmt.d2i));
-    // float scale= std::min(to.width / (float)from.width, to.height / (float)from.height);
-    // afmt.i2d[0] = scale;
-    // afmt.i2d[1] = 0;
-    // afmt.i2d[2] = (-scale * from.width + to.width) * 0.5;
-    // afmt.i2d[3] = 0;
-    // afmt.i2d[4] = scale;
-    // afmt.i2d[5] = (-scale * from.height + to.height) * 0.5;
-    // cv::Mat  cv_i2d(2, 3, CV_32F, afmt.i2d);
-    // cv::Mat  cv_d2i(2, 3, CV_32F, afmt.d2i);
-    // cv::invertAffineTransform(cv_i2d, cv_d2i);         //通过opencv获取仿射变换逆矩阵
-    // cv::Mat input_image(input_h, input_w, CV_8UC3);
-    // cv::warpAffine(img, input_image, cv_i2d, input_image.size(), \
-    //         cv::INTER_LINEAR, cv::BORDER_CONSTANT, cv::Scalar::all(114));  // 对图像做平移缩放旋转变换,可逆
-    // // cv::imwrite("input-image.jpg", input_image);
+    // float r = std::min(input_w / width, input_h / height);
+    // r = std::min(r, 1.0f);
+    // int new_unpadW = int(round(width * r));
+    // int new_unpadH = int(round(height * r));
+    // // std::cout << "new_unpadW:" << new_unpadW << ", new_unpadH:" << new_unpadH << std::endl;
+    // int dw = input_w - new_unpadW;
+    // int dh = input_h - new_unpadH;
+    // dw /= 2, dh /= 2;
+    // // std::cout << "dw:" << dw << ", dh:" << dh << std::endl;
+    // cv::Mat dst;
+    // cv::resize(img, dst, cv::Size(new_unpadW, new_unpadH), 0, 0, cv::INTER_LINEAR);
 
-    // int image_area = input_image.cols * input_image.rows;
-    // unsigned char* pimage = input_image.data;
+    // int top = int(round(dh - 0.1));
+    // int bottom = int(round(dh + 0.1));
+    // int left = int(round(dw - 0.1));
+    // int right = int(round(dw + 0.1));
+    // cv::copyMakeBorder(dst, dst, top, bottom, left, right, \
+    //                 cv::BORDER_CONSTANT, cv::Scalar(114, 114, 114));
+
+    // std::cout<< "dst shape: [" << dst.cols << ", " << dst.rows << "]"<<std::endl;
+    // int image_area = dst.cols * dst.rows;
+    // unsigned char* pimage = dst.data;
     // float* phost_b = host_input + image_area * 0;
     // float* phost_g = host_input + image_area * 1;
     // float* phost_r = host_input + image_area * 2;
@@ -193,6 +159,35 @@ void Yolov8_detector::pre_process(cv::Mat img)
     //     *phost_g++ = pimage[1] / 255.0;
     //     *phost_b++ = pimage[2] / 255.0;
     // }
+
+    float scale_x = input_w / (float)image.cols;
+    float scale_y = input_h / (float)image.rows;
+    float scale = std::min(scale_x, scale_y);
+    // resize图像，源图像和目标图像几何中心的对齐
+    i2d[0] = scale;  i2d[1] = 0;  i2d[2] = (-scale * image.cols + input_w + scale - 1) * 0.5;
+    i2d[3] = 0;  i2d[4] = scale;  i2d[5] = (-scale * image.rows + input_h + scale - 1) * 0.5;
+    cv::Mat m2x3_i2d(2, 3, CV_32F, i2d);  // image to dst(network), 2x3 matrix
+    cv::Mat m2x3_d2i(2, 3, CV_32F, d2i);  // dst to image, 2x3 matrix
+    cv::invertAffineTransform(m2x3_i2d, m2x3_d2i);  // 计算一个反仿射变换
+
+    cv::Mat input_image(input_h, input_w, CV_8UC3);
+    cv::warpAffine(image, input_image, m2x3_i2d, input_image.size(), \
+            cv::INTER_LINEAR, cv::BORDER_CONSTANT, cv::Scalar::all(114));  // 对图像做平移缩放旋转变换,可逆
+    // cv::imwrite("input_image.jpg", input_image);
+
+    std::cout<< "input_image shape: [" << input_image.cols << ", " << input_image.rows << "]"<<std::endl;
+
+    int image_area = input_image.cols * input_image.rows;
+    unsigned char* pimage = input_image.data;
+    float* phost_b = host_input + image_area * 0;
+    float* phost_g = host_input + image_area * 1;
+    float* phost_r = host_input + image_area * 2;
+    for(int i = 0; i < image_area; ++i, pimage += 3){
+        // 注意这里的顺序rgb调换了
+        *phost_r++ = pimage[0] / 255.0;
+        *phost_g++ = pimage[1] / 255.0;
+        *phost_b++ = pimage[2] / 255.0;
+    }
 
     /* upload input tensor and run inference */
     cudaMemcpyAsync(device_buffers[input_index], host_input, input_buffer_size,
@@ -262,19 +257,24 @@ void Yolov8_detector::post_process(cv::Mat& img)
         float w = host_output[w_index];
         float h = host_output[h_index];
 
-        int left   = (x_center - w * 0.5f) / scale;
-        int top    = (y_center - h * 0.5f) / scale;
-        int right  = (x_center + w * 0.5f) / scale;
-        int bottom = (y_center + h * 0.5f) / scale;
+        float left   = x_center - w * 0.5f;
+        float top    = y_center - h * 0.5f;
+        float right  = x_center + w * 0.5f;
+        float bottom = y_center + h * 0.5f;
+        float image_base_left   = d2i[0] * left   + d2i[2];
+        float image_base_right  = d2i[0] * right  + d2i[2];
+        float image_base_top    = d2i[0] * top    + d2i[5];
+        float image_base_bottom = d2i[0] * bottom + d2i[5];
 
         /* clip */
-        left = std::min(std::max(0, left), img.cols - 1);
-        top = std::min(std::max(0, top), img.rows - 1);
-        right = std::min(std::max(0, right), img.cols - 1);
-        bottom = std::min(std::max(0, bottom), img.rows - 1);
+        image_base_left = std::min(std::max(0.0f, image_base_left), float(img.cols - 1));
+        image_base_top = std::min(std::max(0.0f, image_base_top), float(img.rows - 1));
+        image_base_right = std::min(std::max(0.0f, image_base_right), float(img.cols - 1));
+        image_base_bottom = std::min(std::max(0.0f, image_base_bottom), float(img.rows - 1));
 
         Object obj;
-        obj.rect = cv::Rect_<float>(left, top, right - left,  bottom - top);
+        obj.rect = cv::Rect_<float>(image_base_left, image_base_top,\
+                            image_base_right - image_base_left,  image_base_bottom - image_base_top);
         obj.label = label;
         obj.score = max_confidence;
         proposals.push_back(obj);

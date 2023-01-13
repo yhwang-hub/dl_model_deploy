@@ -1,26 +1,20 @@
-#include <chrono>
-#include <gflags/gflags.h>
-
-/* The Only header file for yolox inference */
 #include "../include/yolov5.h"
 
-const int INPUT_H = 640;
-// const int INPUT_W = 640;
-const int INPUT_W = 480;
-
-int main(int argc, char** argv){
+int main(int argc, char** argv)
+{
     const std::string img_path = "../bus.jpg";
-    // const std::string img_path = "../1.jpg";
-    const std::string model_path = "../yolov5s.engine";
     cv::Mat image = cv::imread(img_path);
     if(image.empty()){
         std::cout<<"Input image path wrong!!"<<std::endl;
         return -1;
     }
-    YOLOV5* yolov5_instance = new YOLOV5(INPUT_H,
-                                        INPUT_W,
-                                        model_path);
-    yolov5_instance->do_inference(image);
+
+    const std::string model_path = "../yolov5s_640x640.engine";
+    Yolov5_detector* yolov5_instance = new Yolov5_detector(model_path);
+    yolov5_instance->do_detection(image);
+
+    std::string save_path = "./yolov5.jpg";
+    cv::imwrite(save_path, image);
 
     if(yolov5_instance)
     {

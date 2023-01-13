@@ -1,40 +1,22 @@
-#include "../include/yolov5.h"
 #include <chrono>
 #include <iostream>
+#include <fstream> 
+#include <math.h>
+#include "../include/yolov5.h"
 #include "../include/common.h"
-#include <fstream>
-#include <unistd.h>
 
 static const int DEVICE  = 0;
 
-YOLOV5::YOLOV5(const int INPUT_H, 
-           const int INPUT_W,
-           const std::string& _engine_file):
-    input_dim2(INPUT_H),
-    input_dim3(INPUT_W),
-    input_bufsize(input_dim0 * input_dim1 *
-                input_dim2 * input_dim3 *
-                sizeof(float)),
-    output_bufsize(output_dim0 * 
-                output_dim1 *
-                output_dim2 *
-                sizeof(float)),
-    engine_file(_engine_file)
+Yolov5_detector::Yolov5_detector(const std::string& _engine_file):
+                    engine_file(_engine_file)
 {
+    std::cout<<"engine_file: "<<engine_file<<std::endl;
     init_context();
-    std::cout<<"Inference ["<<input_dim2<<"x"<<input_dim3<<"] constructed"<<std::endl;
-    std::cout<<"input_bufsize: "<<input_bufsize<<", output_bufsize: "<<output_bufsize<<std::endl;
-    init_done = true;
+    std::cout<<"Inference det ["<<input_h<<" x "<<input_w<<"] constructed"<<std::endl;
 }
 
-YOLOV5::~YOLOV5(){
-    if(init_done){
-        destroy_context();
-        std::cout<<"Context destroyed for ["<<input_dim2<<"x"<<input_dim3<<"]"<<std::endl;
-    }
-}
-
-void YOLOV5::init_context(){
+void Yolov5_detector::init_context()
+{
     cudaSetDevice(DEVICE);
     char *trtModelStream{nullptr};
     size_t size{0};
@@ -48,6 +30,7 @@ void YOLOV5::init_context(){
         file.read(trtModelStream, size);
         file.close();
     }
+
     TRTLogger logger;
     nvinfer1::IRuntime* runtime = nvinfer1::createInferRuntime(logger);
     assert(runtime != nullptr);
@@ -59,34 +42,43 @@ void YOLOV5::init_context(){
     delete[] trtModelStream;
     std::cout << "deserialize done" << std::endl;
 
-    bool cudart_ok = true;
-    cudaStreamCreate(&stream);
-    CHECK_CUDA_ERROR(cudart_ok);
+    input_index = engine->getBindingIndex(input_blob_name.c_str());
+    auto input_dims = engine->getBindingDimensions(input_index);
+    input_c = input_dims.d[1];
+    input_h = input_dims.d[2];
+    input_w = input_dims.d[3];
+    input_buffer_size = batchsize * input_c * input_h * input_w * sizeof(float);
+    std::cout << "index[" << input_index
+            <<"], input shape: "
+            <<batchsize
+            <<" x "<<input_c
+            <<" x "<<input_h
+            <<" x "<<input_w
+            <<", input_buf_size: "<<input_buffer_size
+            <<std::endl;
+    CHECK(cudaHostAlloc((void**)&host_input_cpu, input_buffer_size, cudaHostAllocDefault));
+    CHECK(cudaMalloc(&device_buffers[input_index], input_buffer_size));
 
-    /* Allocate memory for inference */
-    const size_t buf_num = input_layers.size() + output_layers.size();
-    std::cout<<"buf_num:"<<buf_num<<std::endl;
-    cudaOutputBuffer = std::vector<void *>(buf_num, nullptr);
-    hostOutputBuffer = std::vector<void *>(buf_num, nullptr);
+    output_index = engine->getBindingIndex(output_blob_name.c_str());
+    auto output_dims = engine->getBindingDimensions(output_index);
+    output_numbox = output_dims.d[1];
+    output_numprob = output_dims.d[2];
+    output_buffer_size = batchsize * output_numbox * output_numprob * sizeof(float);
+    std::cout << "index[" << output_index
+            <<"], output shape: "
+            <<batchsize
+            <<" x "<< output_numbox
+            <<" x "<< output_numprob
+            <<", output_buffer_size: "<<output_buffer_size
+            <<std::endl;
+    CHECK(cudaHostAlloc((void**)&host_output_cpu, output_buffer_size, cudaHostAllocDefault));
+    CHECK(cudaMalloc(&device_buffers[output_index], output_buffer_size));
 
-    for(auto & layer : input_layers)
-    {
-        const std::string & name = layer.first;
-        std::cout<<"input_layers name: "<<name<<std::endl;
-        int index = create_binding_memory(name);
-        input_layers.at(name) = index; /* init binding index */
-    }
-
-    for(auto & layer : output_layers)
-    {
-        const std::string & name = layer.first;
-        std::cout<<"output_layers name: "<<name<<std::endl;
-        int index = create_binding_memory(name);
-        output_layers.at(name) = index; /* init binding index */
-    }
+    CHECK(cudaStreamCreate(&stream));
 }
 
-void YOLOV5::destroy_context(){
+void Yolov5_detector::destroy_context()
+{
     bool cudart_ok = true;
 
     /* Release TensorRT */
@@ -94,207 +86,181 @@ void YOLOV5::destroy_context(){
     {
         context->destroy();
         context = nullptr;
-        std::cout<<"context destroy!"<<std::endl;
     }
-
     if(engine)
     {
         engine->destroy();
         engine = nullptr;
-        std::cout<<"engine destroy!"<<std::endl;
     }
-
-    if(stream) cudaStreamDestroy(stream);
-
-    CHECK_CUDA_ERROR(cudart_ok);
-
-    /* Release memory for inference */
-    for(int i=0; i < (int)cudaOutputBuffer.size(); i++)
+    for(int i = 0; i < 2; ++i)
     {
-        if(cudaOutputBuffer[i])
+        if(device_buffers[i])
         {
-            std::cout<<"cudaOutputBuffer["<<i<<"] destroy!"<<std::endl;
-            cudaFree(cudaOutputBuffer[i]);
-            CHECK_CUDA_ERROR(cudart_ok);
-            cudaOutputBuffer[i] = nullptr;
+            CHECK(cudaFree(device_buffers[i]));
         }
     }
-    for(int i=0; i < (int)hostOutputBuffer.size(); i++)
-    {
-        if(hostOutputBuffer[i])
-        {
-            std::cout<<"hostOutputBuffer["<<i<<"] destroy!"<<std::endl;
-            free(hostOutputBuffer[i]);
-            CHECK_CUDA_ERROR(cudart_ok);
-            hostOutputBuffer[i] = nullptr;
-        }
-    }
+    if(host_input_cpu)
+        CHECK(cudaFreeHost(host_input_cpu));
+    if(host_output_cpu)
+        CHECK(cudaFreeHost(host_output_cpu));
 }
 
-int YOLOV5::create_binding_memory(const std::string& bufname){
-    assert(engine != nullptr);
-
-    const int devbuf_num  = static_cast<int>(cudaOutputBuffer.size());
-    const int hostbuf_num = static_cast<int>(hostOutputBuffer.size());
-
-    std::cout<<"devbuf_num: "<<devbuf_num<<", hostbuf_num: "<<hostbuf_num<<std::endl;
-    int index = engine->getBindingIndex(bufname.c_str());
-    std::cout<<"bufname: "<<bufname<<", index: "<<index<<std::endl;
-
-    size_t elem_size = 0;
-    switch (engine->getBindingDataType(index)){
-        case nvinfer1::DataType::kFLOAT:
-            elem_size = sizeof(float); break;
-        case nvinfer1::DataType::kHALF:
-            elem_size = sizeof(float) >> 1; break;
-        case nvinfer1::DataType::kINT8:
-            elem_size = sizeof(int8_t); break;
-        case nvinfer1::DataType::kINT32:
-            elem_size = sizeof(int32_t); break;
-        default:
-            ; /* fallback */
-    }
-    assert(elem_size != 0);
-
-    size_t elem_count = 0;
-    nvinfer1::Dims dims = engine->getBindingDimensions(index);
-    for (int i = 0; i < dims.nbDims; i++){
-        if (0 == elem_count){
-            elem_count = dims.d[i];
-        }
-        else{
-            elem_count *= dims.d[i];
-        }
-    }
-
-    std::cout<<"elem_size:"<<elem_size<<std::endl;
-    size_t buf_size = elem_count * elem_size;
-    assert(buf_size != 0);
-
-    void * device_mem;
-    bool cudart_ok = true;
-
-    cudaMalloc(&device_mem, buf_size);
-    CHECK_CUDA_ERROR(cudart_ok);
-    assert(cudart_ok);
-
-    cudaOutputBuffer[index] = device_mem;
-
-    void * host_mem = malloc( buf_size );
-    assert(host_mem != nullptr);
-
-    hostOutputBuffer[index] = host_mem;
-
-    printf("Created host and device buffer for %s "   \
-        "with bindingIndex[%d] and size %lu bytes.\n", \
-        bufname.c_str(), index, buf_size );
-
-    return index;
+Yolov5_detector::~Yolov5_detector()
+{
+    destroy_context();
+    std::cout<<"Context destroyed for ["<<input_h<<"x"<<input_w<<"]"<<std::endl;
 }
 
-void* YOLOV5::get_infer_bufptr(const std::string& bufname, bool is_device){
-    assert(init_done);
+void Yolov5_detector::pre_process(cv::Mat image)
+{
+    float scale_x = input_w / (float)image.cols;
+    float scale_y = input_h / (float)image.rows;
+    float scale = std::min(scale_x, scale_y);
+    // resize图像，源图像和目标图像几何中心的对齐
+    i2d[0] = scale;  i2d[1] = 0;  i2d[2] = (-scale * image.cols + input_w + scale - 1) * 0.5;
+    i2d[3] = 0;  i2d[4] = scale;  i2d[5] = (-scale * image.rows + input_h + scale - 1) * 0.5;
+    cv::Mat m2x3_i2d(2, 3, CV_32F, i2d);  // image to dst(network), 2x3 matrix
+    cv::Mat m2x3_d2i(2, 3, CV_32F, d2i);  // dst to image, 2x3 matrix
+    cv::invertAffineTransform(m2x3_i2d, m2x3_d2i);  // 计算一个反仿射变换
 
-    int index = -1;
+    cv::Mat input_image(input_h, input_w, CV_8UC3);
+    cv::warpAffine(image, input_image, m2x3_i2d, input_image.size(), \
+            cv::INTER_LINEAR, cv::BORDER_CONSTANT, cv::Scalar::all(114));  // 对图像做平移缩放旋转变换,可逆
+    // cv::imwrite("input_image.jpg", input_image);
 
-    if (bufname == input)
+    std::cout<< "input_image shape: [" << input_image.cols << ", " << input_image.rows << "]"<<std::endl;
+    int image_area = input_image.cols * input_image.rows;
+    unsigned char* pimage = input_image.data;
+    float* phost_b = host_input_cpu + image_area * 0;
+    float* phost_g = host_input_cpu + image_area * 1;
+    float* phost_r = host_input_cpu + image_area * 2;
+    for(int i = 0; i < image_area; ++i, pimage += 3)
     {
-        index = input_layers.at(bufname);
+        // 注意这里的顺序rgb调换了
+        *phost_r++ = pimage[0] / 255.0;
+        *phost_g++ = pimage[1] / 255.0;
+        *phost_b++ = pimage[2] / 255.0;
     }
-    else
-    {
-        index = output_layers.at(bufname);
-    }
-    std::cout<<bufname<<":"<<index<<std::endl;
-    return (is_device ? cudaOutputBuffer.at(index) : hostOutputBuffer.at(index));
+
+    /* upload input tensor and run inference */
+    cudaMemcpyAsync(device_buffers[input_index], host_input_cpu, input_buffer_size,
+                    cudaMemcpyHostToDevice, stream);
 }
 
-void YOLOV5::pre_process(cv::Mat& image, float* host_input_blob){
-    cv::Mat img = image.clone();
-    cv::Size new_shape = cv::Size(640, 640);
-    float width = img.cols;
-    float height = img.rows;
-    float r = std::min(new_shape.width / width, new_shape.height / height);
-    r = std::min(r, 1.0f);
-    int new_unpadW = int(round(width * r));
-    int new_unpadH = int(round(height * r));
-    std::cout<<"new_unpadW:"<<new_unpadW<<", new_unpadH:"<<new_unpadH<<std::endl;
-    int dw = (new_shape.width - new_unpadW) % 32;
-    int dh = (new_shape.height - new_unpadH) % 32;
-    dw /= 2, dh /= 2;
-    std::cout<<"dw:"<<dw<<", dh:"<<dh<<std::endl;
-    cv::Mat dst;
-    cv::resize(img, dst, cv::Size(new_unpadW, new_unpadH), 0, 0, cv::INTER_LINEAR);
-    int top = int(round(dh - 0.1));
-    int bottom = int(round(dh + 0.1));
-    int left = int(round(dw - 0.1));
-    int right = int(round(dw + 0.1));
-    cv::copyMakeBorder(dst, dst, top, bottom, left, right, \
-                    cv::BORDER_CONSTANT, cv::Scalar(114, 114, 114));
-    // cv::cvtColor(dst, dst, cv::COLOR_BGR2RGB);
-
-    int channels = 3;
-    int img_h = dst.rows;
-    int img_w = dst.cols;
-    std::cout<<channels<<", "<<img_h<<", "<<img_w<<", "<<dst.total()*3<<std::endl;
-    for (size_t c = 0; c < channels; c++) 
-    {
-        for (size_t  h = 0; h < img_h; h++) 
-        {
-            for (size_t w = 0; w < img_w; w++) 
-            {
-                float data = ((float)dst.at<cv::Vec3b>(h, w)[c]) / 255.0;
-                host_input_blob[c * img_w * img_h + h * img_w + w] = data;   
-            }
-        }
-    }
-}
-
-void YOLOV5::do_inference(cv::Mat& image){
+void Yolov5_detector::do_detection(cv::Mat& img)
+{
     assert(context != nullptr);
-
-    void* host_input = get_infer_bufptr(input, false);
-    void* device_input = get_infer_bufptr(input, true);
-
-    void* host_output = get_infer_bufptr(output, false);
-    void* device_output = get_infer_bufptr(output, true);
-    
-    pre_process(image, static_cast<float *>(host_input));
-
-    cudaMemcpyAsync(device_input, host_input, input_bufsize,
-                        cudaMemcpyHostToDevice, stream);
+    auto start_preprocess = std::chrono::high_resolution_clock::now();
+    pre_process(img);
+    auto end_preprocess = std::chrono::high_resolution_clock::now();
+    float preprocess_time = std::chrono::duration<float, std::milli>(end_preprocess - start_preprocess).count();
+    std::cout<<"preprocess time: "<< preprocess_time<<" ms."<< std::endl;
     std::cout<<"Pre-process done!"<<std::endl;
 
     bool res_ok = true;
     auto t_start1 = std::chrono::high_resolution_clock::now();
-
-    context->enqueueV2(&cudaOutputBuffer[0], stream, nullptr);
-
+    /* Debug device_input on cuda kernel */
+    context->enqueue(batchsize, device_buffers, stream, nullptr);
     auto t_end1 = std::chrono::high_resolution_clock::now();
     float total_inf1 = std::chrono::duration<float, std::milli>(t_end1 - t_start1).count();
     std::cout << "Infer take: " << total_inf1/1000 << " s." << std::endl;
 
-    // std::cout<<"output_bufsize:"<<output_bufsize<<std::endl;
-    cudaMemcpyAsync(host_output, device_output, output_bufsize,
-                    cudaMemcpyDeviceToHost, stream);
-
-    cudaStreamSynchronize(stream);
-    CHECK_CUDA_ERROR(res_ok);
-    assert(res_ok);
-    std::cout<<"Model enqueue done!"<<std::endl;
-
-    post_process(image, static_cast<float *>(host_output));
+    post_process(img);
     std::cout<<"Post-process done!"<<std::endl;
 }
 
-void YOLOV5::post_process(cv::Mat& img, float* host_output_data){
-    std::vector<Object> objects;
-    float scale = std::min(input_dim3 / (img.cols*1.0), input_dim2 / (img.rows*1.0));
-    float x_scale = (img.cols*1.0) / input_dim3;
-    float y_scale = (img.rows*1.0) / input_dim2;
-    int img_w = img.cols;
-    int img_h = img.rows;
-    std::cout<<"img_w:"<<img_w<<", img_h:"<<img_h<<std::endl;
-    decode_outputs(static_cast<float*>(host_output_data), output_bufsize / sizeof(float), objects, scale, x_scale, y_scale, img_w, img_h);
-    draw_objects(img, objects);
+void Yolov5_detector::post_process(cv::Mat& img)
+{
+    CHECK(cudaMemcpyAsync(host_output_cpu, device_buffers[output_index],
+                    output_buffer_size, cudaMemcpyDeviceToHost, stream));
+    CHECK(cudaStreamSynchronize(stream));
+
+    std::vector<std::vector<float>> bboxes;
+
+    for (int i = 0; i < output_numbox; i++)
+    {
+        float* ptr = host_output_cpu + i * output_numprob;
+        float objness = ptr[4];
+        if(objness < conf_thresh)
+            continue;
+
+        float* pclass = ptr + 5;
+        int label     = std::max_element(pclass, pclass + num_classes) - pclass;
+        float prob    = pclass[label];
+        float confidence = prob * objness;
+        if(confidence < conf_thresh)
+            continue;
+
+        float cx     = ptr[0];
+        float cy     = ptr[1];
+        float width  = ptr[2];
+        float height = ptr[3];
+        float left   = cx - width * 0.5;
+        float top    = cy - height * 0.5;
+        float right  = cx + width * 0.5;
+        float bottom = cy + height * 0.5;
+        float image_base_left   = d2i[0] * left   + d2i[2];
+        float image_base_right  = d2i[0] * right  + d2i[2];
+        float image_base_top    = d2i[0] * top    + d2i[5];
+        float image_base_bottom = d2i[0] * bottom + d2i[5];
+        bboxes.push_back({image_base_left, image_base_top, image_base_right, image_base_bottom, (float)label, confidence});
+    }
+    printf("decoded bboxes.size = %d\n", bboxes.size());
+
+    // nms
+    std::sort(bboxes.begin(), bboxes.end(), [](std::vector<float>& a, std::vector<float>& b){return a[5] > b[5];});
+    std::vector<bool> remove_flags(bboxes.size());
+    std::vector<std::vector<float>> box_result;
+    box_result.reserve(bboxes.size());
+
+    auto iou = [](const std::vector<float>& a, const std::vector<float>& b){
+        float cross_left   = std::max(a[0], b[0]);
+        float cross_top    = std::max(a[1], b[1]);
+        float cross_right  = std::min(a[2], b[2]);
+        float cross_bottom = std::min(a[3], b[3]);
+
+        float cross_area = std::max(0.0f, cross_right - cross_left) * std::max(0.0f, cross_bottom - cross_top);
+        float union_area = std::max(0.0f, a[2] - a[0]) * std::max(0.0f, a[3] - a[1]) 
+                         + std::max(0.0f, b[2] - b[0]) * std::max(0.0f, b[3] - b[1]) - cross_area;
+        if(cross_area == 0 || union_area == 0) return 0.0f;
+        return cross_area / union_area;
+    };
+
+    for(int i = 0; i < bboxes.size(); ++i){
+        if(remove_flags[i]) continue;
+
+        auto& ibox = bboxes[i];
+        box_result.emplace_back(ibox);
+        for(int j = i + 1; j < bboxes.size(); ++j){
+            if(remove_flags[j]) continue;
+
+            auto& jbox = bboxes[j];
+            if(ibox[4] == jbox[4]){
+                // class matched
+                if(iou(ibox, jbox) >= nms_thresh)
+                    remove_flags[j] = true;
+            }
+        }
+    }
+    printf("box_result.size = %d\n", box_result.size());
+
+    for(int i = 0; i < box_result.size(); ++i){
+        auto& ibox = box_result[i];
+        float left = ibox[0];
+        float top = ibox[1];
+        float right = ibox[2];
+        float bottom = ibox[3];
+        int class_label = ibox[4];
+        float confidence = ibox[5];
+        cv::Scalar color;
+        std::tie(color[0], color[1], color[2]) = random_color(class_label);
+        cv::rectangle(img, cv::Point(left, top), cv::Point(right, bottom), color, 3);
+
+        auto name      = cocolabels[class_label];
+        auto caption   = cv::format("%s %.2f", name, confidence);
+        int text_width = cv::getTextSize(caption, 0, 1, 2, nullptr).width + 10;
+        cv::rectangle(img, cv::Point(left-3, top-33), cv::Point(left + text_width, top), color, -1);
+        cv::putText(img, caption, cv::Point(left, top-5), 0, 1, cv::Scalar::all(0), 2, 16);
+    }
+    // cv::imwrite("image-draw.jpg", img);
 }

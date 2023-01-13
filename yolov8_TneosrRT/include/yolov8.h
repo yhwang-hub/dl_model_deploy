@@ -64,6 +64,8 @@ private:
     float* host_input;
     float* host_output;
     float* affine_matrix_d2i_host = nullptr;
+    float i2d[6];   //仿射变换正矩阵
+    float d2i[6];   //仿射变换逆矩阵
 
     void* device_buffers[2];
 
