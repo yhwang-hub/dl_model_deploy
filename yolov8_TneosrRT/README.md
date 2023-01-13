@@ -15,7 +15,7 @@ docker pull longxiaowyh/yolov5:v1.0
 https://github.com/ultralytics/assets/releases/download/v0.0.0/yolov8s.pt
 ## onnx模型导出
 ```C++
-root@3e9b6779a283:/home/wyh/ultralytics-0.0.59# yolo mode=export model=weights/yolov8s.pt format=onnx simplify=True opset=11 imgsz=[480,640]
+root@3e9b6779a283:/home/wyh/ultralytics-0.0.59# yolo mode=export model=weights/yolov8s.pt format=onnx simplify=True opset=11
 Fusing layers... 
 YOLOv8s summary: 168 layers, 11156544 parameters, 0 gradients, 28.6 GFLOPs
 Ultralytics YOLO 🚀 0.0.59 Python-3.8.13 torch-1.12.1+cu113 CPU
