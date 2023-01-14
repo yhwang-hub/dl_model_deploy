@@ -4,7 +4,7 @@
 
 # 1.export onnx
 
-修改yolov5源码中的grid部分如下图所示：
+修改yolov5源码(git@github.com:ultralytics/yolov5.git)中的grid部分如下图所示：
 ![image](https://github.com/yhwang-hub/dl_model_deploy/blob/master/yolov5_cutoff_TensorRT/yolov5-gird-code.png)
 
 使用如下指令导出截断后处理的onnx
@@ -12,6 +12,7 @@
 python onnx_cutoff_export.py --weights weights/yolov5s.pt --simplify --opset 11 --include onnx
 ```
 修改后的onnx输出如下所示：
+
 ![image](https://github.com/yhwang-hub/dl_model_deploy/blob/master/yolov5_cutoff_TensorRT/yolov5-cutoff-output0.png)
 ![image](https://github.com/yhwang-hub/dl_model_deploy/blob/master/yolov5_cutoff_TensorRT/yolov5-cutoff-output1.png)
 ![image](https://github.com/yhwang-hub/dl_model_deploy/blob/master/yolov5_cutoff_TensorRT/yolov5-cutoff-output2.png)
