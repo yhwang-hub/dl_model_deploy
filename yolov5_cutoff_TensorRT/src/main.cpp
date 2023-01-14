@@ -70,7 +70,8 @@ int main(int argc, char **argv)
         std::cout<<"Input image path wrong!!"<<std::endl;
         return -1;
     }
-    const std::string model_path = "../yolov5s_cutoff.engine";
+    // const std::string model_path = "../yolov5s_cutoff.engine";
+    const std::string model_path = "../yolov5s_cutoff_640x640.engine";
     Yolov5_Detector* yolov5_instance = new Yolov5_Detector(model_path);
     yolov5_instance->do_detection(image);
     

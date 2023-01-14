@@ -2,9 +2,6 @@
 #include "../include/yolov5.h"
 #include "../include/common.h"
 
-// #define OUTPUT_DEBUG
-// #define INPUT_DEBUG
-
 static const int DEVICE  = 0;
 
 Yolov5_Detector::Yolov5_Detector(const std::string& _engine_file):
@@ -110,64 +107,37 @@ Yolov5_Detector::~Yolov5_Detector()
     std::cout<<"Context destroyed for ["<<input_h<<"x"<<input_w<<"]"<<std::endl;
 }
 
-void Yolov5_Detector::pre_process(cv::Mat& image)
-{    
-#ifdef INPUT_DEBUG    
-    std::string Tensorrt_preprocess_txt_name = "Tensorrt_preprocess.txt";
-    if (access(Tensorrt_preprocess_txt_name.c_str(),0) == 0){
-        if(remove(Tensorrt_preprocess_txt_name.c_str()) == 0){
-            std::cout<<Tensorrt_preprocess_txt_name<<" has been deleted successfuly!"<<std::endl;
-        }
-    }
-    std::ofstream Tensorrt_preprocess;
-    Tensorrt_preprocess.open(Tensorrt_preprocess_txt_name);
-#endif
+void Yolov5_Detector::pre_process(cv::Mat image)
+{
+    float scale_x = input_w / (float)image.cols;
+    float scale_y = input_h / (float)image.rows;
+    float scale = std::min(scale_x, scale_y);
+    // resize图像，源图像和目标图像几何中心的对齐
+    i2d[0] = scale;  i2d[1] = 0;  i2d[2] = (-scale * image.cols + input_w + scale - 1) * 0.5;
+    i2d[3] = 0;  i2d[4] = scale;  i2d[5] = (-scale * image.rows + input_h + scale - 1) * 0.5;
+    cv::Mat m2x3_i2d(2, 3, CV_32F, i2d);  // image to dst(network), 2x3 matrix
+    cv::Mat m2x3_d2i(2, 3, CV_32F, d2i);  // dst to image, 2x3 matrix
+    cv::invertAffineTransform(m2x3_i2d, m2x3_d2i);  // 计算一个反仿射变换
 
-    cv::Mat img = image.clone();
-    cv::Size new_shape = cv::Size(640, 640);
-    float width = img.cols;
-    float height = img.rows;
-    float r = std::min(new_shape.width / width, new_shape.height / height);
-    r = std::min(r, 1.0f);
-    int new_unpadW = int(round(width * r));
-    int new_unpadH = int(round(height * r));
-    std::cout<<"new_unpadW:"<<new_unpadW<<", new_unpadH:"<<new_unpadH<<std::endl;
-    int dw = (new_shape.width - new_unpadW) % 32;
-    int dh = (new_shape.height - new_unpadH) % 32;
-    dw /= 2, dh /= 2;
-    std::cout<<"dw:"<<dw<<", dh:"<<dh<<std::endl;
-    cv::Mat dst;
-    cv::resize(img, dst, cv::Size(new_unpadW, new_unpadH), 0, 0, cv::INTER_LINEAR);
-    int top = int(round(dh - 0.1));
-    int bottom = int(round(dh + 0.1));
-    int left = int(round(dw - 0.1));
-    int right = int(round(dw + 0.1));
-    cv::copyMakeBorder(dst, dst, top, bottom, left, right, \
-                    cv::BORDER_CONSTANT, cv::Scalar(114, 114, 114));
-    // cv::cvtColor(dst, dst, cv::COLOR_BGR2RGB);
+    cv::Mat input_image(input_h, input_w, CV_8UC3);
+    cv::warpAffine(image, input_image, m2x3_i2d, input_image.size(), \
+            cv::INTER_LINEAR, cv::BORDER_CONSTANT, cv::Scalar::all(114));  // 对图像做平移缩放旋转变换,可逆
+    // cv::imwrite("input_image.jpg", input_image);
 
-    int channels = 3;
-    int img_h = dst.rows;
-    int img_w = dst.cols;
-    std::cout<<channels<<", "<<img_h<<", "<<img_w<<", "<<dst.total()*3<<std::endl;
-    for (size_t c = 0; c < channels; c++) 
-    {
-        for (size_t  h = 0; h < img_h; h++) 
-        {
-            for (size_t w = 0; w < img_w; w++) 
-            {
-                float data = ((float)dst.at<cv::Vec3b>(h, w)[c]) / 255.0;
-                host_input[c * img_w * img_h + h * img_w + w] = data;   
-#ifdef DEBUG  
-                Tensorrt_preprocess<<data<<"\n";
-#endif 
-            }
-        }
+    std::cout<< "input_image shape: [" << input_image.cols << ", " << input_image.rows << "]"<<std::endl;
+
+    int image_area = input_image.cols * input_image.rows;
+    unsigned char* pimage = input_image.data;
+    float* phost_b = host_input + image_area * 0;
+    float* phost_g = host_input + image_area * 1;
+    float* phost_r = host_input + image_area * 2;
+    for(int i = 0; i < image_area; ++i, pimage += 3){
+        // 注意这里的顺序rgb调换了
+        *phost_r++ = pimage[0] / 255.0;
+        *phost_g++ = pimage[1] / 255.0;
+        *phost_b++ = pimage[2] / 255.0;
     }
 
-#ifdef DEBUG  
-    Tensorrt_preprocess.close();
-#endif
     /* upload input tensor and run inference */
     cudaMemcpyAsync(device_buffers[input_index], host_input, input_buffer_size,
                     cudaMemcpyHostToDevice, stream);
@@ -183,27 +153,6 @@ void Yolov5_Detector::do_detection(cv::Mat& img)
     std::cout << "preprocess time: " << preprocess_time<< " ms." << std::endl;
     std::cout<<"Pre-process done!"<<std::endl;
 
-#ifdef INPUT_DEBUG
-    float max_diff = 0.0;
-    std::string onnx_preprocess_txt = "onnx_preprocess.txt";
-    std::vector<float>onnx_preprocess;
-    std::ifstream onnx_preprocess_data(onnx_preprocess_txt);
-    float d;
-    while (onnx_preprocess_data >> d)
-    {
-        onnx_preprocess.push_back(d);
-    }
-    for(int i = 0; i < input_buffer_size / sizeof(float); ++i)
-    {
-        float diff = std::abs(static_cast<float *>(host_input)[i] - onnx_preprocess[i]);
-        if(diff > max_diff)
-        {
-            max_diff = diff;
-        }
-    }
-    std::cout<<"preproces max diff:"<<max_diff<<std::endl;
-#endif
-
     bool res_ok = true;
     auto t_start1 = std::chrono::high_resolution_clock::now();
     /* Debug device_input on cuda kernel */
@@ -218,17 +167,6 @@ void Yolov5_Detector::do_detection(cv::Mat& img)
 
 void Yolov5_Detector::post_process(cv::Mat& img)
 {
-#ifdef OUTPUT_DEBUG    
-    std::string Tensorrt_output_txt_name = "Tensorrt_output.txt";
-    if (access(Tensorrt_output_txt_name.c_str(),0) == 0){
-        if(remove(Tensorrt_output_txt_name.c_str()) == 0){
-            std::cout<<Tensorrt_output_txt_name<<" has been deleted successfuly!"<<std::endl;
-        }
-    }
-    std::ofstream Tensorrt_output;
-    Tensorrt_output.open(Tensorrt_output_txt_name);
-#endif
-
     float x_scale = (float)(input_h / (img.cols*1.0));
     float y_scale = (float)(input_w / (img.rows*1.0));
     std::vector<Object> objects;
@@ -250,14 +188,7 @@ void Yolov5_Detector::post_process(cv::Mat& img)
     {
         PERCEPTION_CUDA_CHECK(cudaMemcpyAsync(det_output_cpu[stride], device_buffers[det_output_index[stride]],
                     det_output_buffer_size[stride], cudaMemcpyDeviceToHost, stream));
-
-#ifdef OUTPUT_DEBUG
-        for (int i = 0; i < det_output_buffer_size[stride] / sizeof(float); i++)
-        {
-            float data = det_output_cpu[stride][i];
-            Tensorrt_output<<data<<"\n";
-        }
-#endif
+        cudaStreamSynchronize(stream);
 
         int num_grid_x = (int)(input_w / strides[stride]);
         int num_grid_y = (int)(input_h / strides[stride]);
@@ -335,7 +266,6 @@ void Yolov5_Detector::post_process(cv::Mat& img)
             }
         }
     }
-    cudaStreamSynchronize(stream);
 
     auto end_generate = std::chrono::system_clock::now();
     std::cout<<"generate proposal time:"<<std::chrono::duration_cast<std::chrono::milliseconds>(end_generate - start_generate).count()<<" ms"<<std::endl;
@@ -364,14 +294,10 @@ void Yolov5_Detector::post_process(cv::Mat& img)
     {
         objects[i] = proposals[picked[i]];
 
-        // float x0 = (objects[i].rect.x) / x_scale;
-        // float y0 = (objects[i].rect.y) / y_scale;
-        // float x1 = (objects[i].rect.x + objects[i].rect.width) / x_scale;
-        // float y1 = (objects[i].rect.y + objects[i].rect.height) / y_scale;
-        float x0 = (objects[i].rect.x) / scale;
-        float y0 = (objects[i].rect.y) / scale;
-        float x1 = (objects[i].rect.x + objects[i].rect.width) / scale;
-        float y1 = (objects[i].rect.y + objects[i].rect.height) / scale;
+        float x0 = objects[i].rect.x * d2i[0] + d2i[2];
+        float y0 = objects[i].rect.y * d2i[0] + d2i[5];
+        float x1 = (objects[i].rect.x + objects[i].rect.width) * d2i[0] + d2i[2];
+        float y1 = (objects[i].rect.y + objects[i].rect.height) * d2i[0] + d2i[5];
 
         objects[i].rect.x = x0;
         objects[i].rect.y = y0;
@@ -385,8 +311,4 @@ void Yolov5_Detector::post_process(cv::Mat& img)
     draw_objects(img, objects);
     auto end_draw = std::chrono::system_clock::now();
     std::cout<<"draw_time:"<<std::chrono::duration_cast<std::chrono::milliseconds>(end_draw - start_draw).count()<<" ms"<<std::endl;
-
-#ifdef OUTPUT_DEBUG  
-    Tensorrt_output.close();
-#endif
 }

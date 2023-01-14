@@ -77,7 +77,7 @@ public:
     }
 
 static const int NUM_CLASSES = 80;
-static const float BBOX_CONF_THRESH = 0.5;
+static const float BBOX_CONF_THRESH = 0.25;
 static const float NMS_THRESH = 0.5;
 
 struct Object

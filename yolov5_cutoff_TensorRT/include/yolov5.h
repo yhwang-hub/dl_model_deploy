@@ -19,8 +19,8 @@ class Yolov5_Detector
 {
 public:
     const int batchsize = 1;
-    // const int input_w = 640;
-    const int input_w = 480;
+    const int input_w = 640;
+    // const int input_w = 480;
     const int input_h = 640;
     const int input_c = 3;
     const int classes_num = 80;
@@ -55,6 +55,8 @@ private:
     void* device_buffers[num_stages + 1];
     int featmap_sizes[num_stages][2];
     bool init_done = false;
+    float i2d[6];   //仿射变换正矩阵
+    float d2i[6];   //仿射变换逆矩阵
 
     const std::string engine_file;
     cudaStream_t stream = nullptr;
@@ -65,7 +67,7 @@ private:
 
     void init_context();
     void destroy_context();
-    void pre_process(cv::Mat& img);
+    void pre_process(cv::Mat img);
     void post_process(cv::Mat& img);
     float sigmoid_x(float x)
 	{
