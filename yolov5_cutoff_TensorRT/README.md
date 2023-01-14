@@ -5,7 +5,7 @@
 # 1.export onnx
 
 修改yolov5源码中的grid部分如下图所示：
-![image](https://github.com/yhwang-hub/dl_model_deploy/blob/master/yolov5_cutoff_TensorRT/yolov5-grid.png)
+![image](https://github.com/yhwang-hub/dl_model_deploy/blob/master/yolov5_cutoff_TensorRT/yolov5-gird-code.png)
 
 使用如下指令导出截断后处理的onnx
 ```C++
