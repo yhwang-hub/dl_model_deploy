@@ -1,6 +1,7 @@
 # 1.export onnx
 
-下载yolov5源码(https://github.com/ultralytics/yolov5)，完成环境搭建，建议使用链接提供的docker(docker pull ultralytics/yolov5)
+下载yolov5源码(https://github.com/ultralytics/yolov5)
+完成环境搭建，建议使用链接提供的docker(docker pull ultralytics/yolov5)
 ```C++
 python export.py --weights yolov5s.pt --include onnx --simplify
 ```
