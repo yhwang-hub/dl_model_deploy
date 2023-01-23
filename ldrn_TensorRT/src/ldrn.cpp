@@ -190,7 +190,7 @@ void Ldrn_detector::post_process(cv::Mat& img)
 
     cv::Mat mat_out = cv::Mat(output_h, output_w, CV_32FC1, values);  /* value has no specific range */
 
-    mat_out.convertTo(mat_out, CV_8UC1, -5, 255);   /* experimentally deterined */
+    mat_out.convertTo(mat_out, CV_8UC1, -4, 255);   /* experimentally deterined */
     mat_out = mat_out(cv::Rect(0, static_cast<int32_t>(mat_out.rows * 0.18), mat_out.cols, static_cast<int32_t>(mat_out.rows * (1.0 - 0.18))));
     std::cout << "mat_out height: " << mat_out.rows << ", mat_out width: " << mat_out.cols << std::endl;// 209 * 512
 
