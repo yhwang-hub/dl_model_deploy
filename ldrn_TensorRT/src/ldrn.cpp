@@ -189,7 +189,11 @@ void Ldrn_detector::post_process(cv::Mat& img)
     int output_w = output_dims[num_output - 1][3];
 
     cv::Mat mat_out = cv::Mat(output_h, output_w, CV_32FC1, values);  /* value has no specific range */
-
+    
+    // double depth_min, depth_max;
+    // cv::minMaxLoc(mat_out, &depth_min, &depth_max);
+    // mat_out.convertTo(mat_out, CV_8UC1, 255. / (depth_max - depth_min), (-255. * depth_min) / (depth_max - depth_min));
+    // mat_out.convertTo(mat_out, CV_8UC1);
     mat_out.convertTo(mat_out, CV_8UC1, -4, 255);   /* experimentally deterined */
     mat_out = mat_out(cv::Rect(0, static_cast<int32_t>(mat_out.rows * 0.18), mat_out.cols, static_cast<int32_t>(mat_out.rows * (1.0 - 0.18))));
     std::cout << "mat_out height: " << mat_out.rows << ", mat_out width: " << mat_out.cols << std::endl;// 209 * 512
