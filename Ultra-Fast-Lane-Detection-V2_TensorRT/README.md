@@ -16,7 +16,7 @@ https://github.com/PINTO0309/PINTO_model_zoo/blob/main/324_Ultra-Fast-Lane-Detec
 mkdir build && cd build
 cmake ..
 make
-./ufld
+./ufldv2
 ```
 
 ![image](https://github.com/yhwang-hub/dl_model_deploy/blob/master/Ultra-Fast-Lane-Detection-V2_TensorRT/ufldv2.jpg)
