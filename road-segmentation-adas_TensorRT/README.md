@@ -30,5 +30,7 @@ make
 # Acknowledgements
 
 https://github.com/iwatake2222/play_with_tflite/tree/master/pj_tflite_ss_road-segmentation-adas-0001
+
 https://github.com/openvinotoolkit/open_model_zoo/tree/master/models/intel/road-segmentation-adas-0001
+
 https://motchallenge.net/

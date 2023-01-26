@@ -18,7 +18,6 @@
 #include <string>
 #include <sys/stat.h>
 
-#define IS_NCHW
 
 #define CHECK(status) \
     do\
