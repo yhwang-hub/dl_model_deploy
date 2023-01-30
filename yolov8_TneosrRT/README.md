@@ -49,3 +49,6 @@ make
 ./demo
 ```
 ![image](https://github.com/yhwang-hub/dl_model_deploy/blob/master/yolov8_TneosrRT/yolov8.jpg)
+
+# Reference
+https://github.com/FeiYull/TensorRT-Alpha
