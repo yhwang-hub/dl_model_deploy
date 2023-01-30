@@ -30,7 +30,10 @@ include_directories(${OpenCV_INCLUDE_DIRS})
 
 # CUDA_ADD_EXECUTABLE(yolov7 ${PROJECT_SOURCE_DIR}/yolox.cpp ${PROJECT_SOURCE_DIR}/plugin_cuda_functions.cu)
 # CUDA_ADD_EXECUTABLE(yolov8 ${PROJECT_SOURCE_DIR}/src/main.cpp  ${PROJECT_SOURCE_DIR}/src/yolov8.cpp ${PROJECT_SOURCE_DIR}/src/yolov8_decode.cu)
-CUDA_ADD_EXECUTABLE(yolov8 ${PROJECT_SOURCE_DIR}/src/main.cpp  ${PROJECT_SOURCE_DIR}/src/yolov8.cpp)
+CUDA_ADD_EXECUTABLE(yolov8
+                    ${PROJECT_SOURCE_DIR}/src/main.cpp
+                    ${PROJECT_SOURCE_DIR}/src/yolov8.cpp
+                    ${PROJECT_SOURCE_DIR}/src/cuda_kernel.cu)
 target_link_libraries(yolov8 nvinfer)
 target_link_libraries(yolov8 cudart)
 target_link_libraries(yolov8 ${OpenCV_LIBS} )

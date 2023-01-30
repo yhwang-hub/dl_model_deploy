@@ -48,8 +48,10 @@ public:
 
     float conf_thresh = 0.25f;
     float nms_thresh = 0.5f;
+    int output_objects_width = 7; // 7:left, top, right, bottom, confidence, class, keepflag;
+    int topK = 1000;
 
-    const std::string input_blob_name = "images";
+    const std::string input_blob_name  = "images";
     const std::string output_blob_name = "output0";
 
     Yolov8_detector(const std::string& _engine_file);
@@ -63,11 +65,15 @@ private:
     int output_index;
     float* host_input;
     float* host_output;
-    float* affine_matrix_d2i_host = nullptr;
+
     float i2d[6];   //仿射变换正矩阵
     float d2i[6];   //仿射变换逆矩阵
 
     void* device_buffers[2];
+    float* device_output_transpose;
+    float* device_output_objects;
+    int* device_output_idx;
+    float* device_output_conf;
 
     const std::string engine_file;
     cudaStream_t stream = nullptr;
@@ -80,6 +86,7 @@ private:
     void destroy_context();
     void pre_process(cv::Mat img);
     void post_process(cv::Mat& img);
+    void post_process_gpu(cv::Mat& img);
     void get_affine_martrix(affine_matrix &afmt,cv::Size &to,cv::Size &from);  //计算放射变换的正矩阵和逆矩阵
     void nms_sorted_bboxes(const std::vector<Object>& proposals,
                         std::vector<int>& picked,

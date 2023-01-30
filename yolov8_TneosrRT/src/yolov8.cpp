@@ -4,7 +4,9 @@
 #include <math.h>
 #include "../include/yolov8.h"
 #include "../include/common.h"
-// #include "../include/yolov8_deode.h"
+#include "../include/cuda_kernel.h"
+
+#define USE_CUDA
 
 static const int DEVICE  = 0;
 
@@ -69,8 +71,17 @@ void Yolov8_detector::init_context()
             <<" x "<< output_bbox_num
             <<", output_buffer_size: "<<output_buffer_size
             <<std::endl;
+#ifdef USE_CUDA
+    CHECK(cudaMalloc(&device_output_transpose, output_buffer_size));
+    CHECK(cudaMalloc(&device_output_objects, (topK * output_objects_width + 1) * sizeof(float)));
+    CHECK(cudaMalloc(&device_output_idx, batchsize * topK * sizeof(int)));
+    CHECK(cudaMalloc(&device_output_conf, batchsize * topK * sizeof(float)));
+    CHECK(cudaHostAlloc((void**)&host_output, (topK * output_objects_width + 1) * sizeof(float), cudaHostAllocDefault));
+#else
     CHECK(cudaHostAlloc((void**)&host_output, output_buffer_size, cudaHostAllocDefault));
+#endif
     CHECK(cudaMalloc(&device_buffers[output_index], output_buffer_size));
+    
 
     CHECK(cudaStreamCreate(&stream));
 }
@@ -97,6 +108,20 @@ void Yolov8_detector::destroy_context()
             CHECK(cudaFree(device_buffers[i]));
         }
     }
+
+#ifdef USE_CUDA
+    if(device_output_transpose)
+        CHECK(cudaFree(device_output_transpose));
+    if (device_output_objects)
+        CHECK(cudaFree(device_output_objects));
+    if (device_output_idx)
+        CHECK(cudaFree(device_output_idx));
+    if (device_output_conf)
+        CHECK(cudaFree(device_output_conf));
+#endif
+
+    if(stream)
+        CHECK(cudaStreamDestroy(stream));
     if(host_input)
         CHECK(cudaFreeHost(host_input));
     if(host_output)
@@ -109,57 +134,8 @@ Yolov8_detector::~Yolov8_detector()
     std::cout<<"Context destroyed for ["<<input_h<<"x"<<input_w<<"]"<<std::endl;
 }
 
-void Yolov8_detector::get_affine_martrix(affine_matrix &afmt,cv::Size &to,cv::Size &from)  //计算放射变换的正矩阵和逆矩阵
-{
-    float scale= std::min(to.width/(float)from.width,to.height/(float)from.height);
-    afmt.i2d[0]=scale;
-    afmt.i2d[1]=0;
-    afmt.i2d[2]=(-scale*from.width+to.width) * 0.5;
-    afmt.i2d[3]=0;
-    afmt.i2d[4]=scale;
-    afmt.i2d[5]=(-scale*from.height+to.height) * 0.5;
-    cv::Mat  cv_i2d(2, 3, CV_32F, afmt.i2d);
-    cv::Mat  cv_d2i(2, 3, CV_32F, afmt.d2i);
-    cv::invertAffineTransform(cv_i2d, cv_d2i);         //通过opencv获取仿射变换逆矩阵
-    memcpy(afmt.d2i, cv_d2i.ptr<float>(0), sizeof(afmt.d2i));
-}
-
 void Yolov8_detector::pre_process(cv::Mat image)
 {
-    // float width = img.cols;
-    // float height = img.rows;
-    // float r = std::min(input_w / width, input_h / height);
-    // r = std::min(r, 1.0f);
-    // int new_unpadW = int(round(width * r));
-    // int new_unpadH = int(round(height * r));
-    // // std::cout << "new_unpadW:" << new_unpadW << ", new_unpadH:" << new_unpadH << std::endl;
-    // int dw = input_w - new_unpadW;
-    // int dh = input_h - new_unpadH;
-    // dw /= 2, dh /= 2;
-    // // std::cout << "dw:" << dw << ", dh:" << dh << std::endl;
-    // cv::Mat dst;
-    // cv::resize(img, dst, cv::Size(new_unpadW, new_unpadH), 0, 0, cv::INTER_LINEAR);
-
-    // int top = int(round(dh - 0.1));
-    // int bottom = int(round(dh + 0.1));
-    // int left = int(round(dw - 0.1));
-    // int right = int(round(dw + 0.1));
-    // cv::copyMakeBorder(dst, dst, top, bottom, left, right, \
-    //                 cv::BORDER_CONSTANT, cv::Scalar(114, 114, 114));
-
-    // std::cout<< "dst shape: [" << dst.cols << ", " << dst.rows << "]"<<std::endl;
-    // int image_area = dst.cols * dst.rows;
-    // unsigned char* pimage = dst.data;
-    // float* phost_b = host_input + image_area * 0;
-    // float* phost_g = host_input + image_area * 1;
-    // float* phost_r = host_input + image_area * 2;
-    // for(int i = 0; i < image_area; ++i, pimage += 3){
-    //     // 注意这里的顺序rgb调换了
-    //     *phost_r++ = pimage[0] / 255.0;
-    //     *phost_g++ = pimage[1] / 255.0;
-    //     *phost_b++ = pimage[2] / 255.0;
-    // }
-
     float scale_x = input_w / (float)image.cols;
     float scale_y = input_h / (float)image.rows;
     float scale = std::min(scale_x, scale_y);
@@ -212,7 +188,15 @@ void Yolov8_detector::do_detection(cv::Mat& img)
     float total_inf1 = std::chrono::duration<float, std::milli>(t_end1 - t_start1).count();
     std::cout << "Infer take: " << total_inf1/1000 << " s." << std::endl;
 
+    auto start_postprocess = std::chrono::high_resolution_clock::now();
+#ifdef USE_CUDA
+    post_process_gpu(img);
+#else
     post_process(img);
+#endif
+    auto end_postprocess = std::chrono::high_resolution_clock::now();
+    float postprocess_time = std::chrono::duration<float, std::milli>(end_postprocess - start_postprocess).count();
+    std::cout<<"postprocess time: "<< preprocess_time<<" ms."<< std::endl;
     std::cout<<"Post-process done!"<<std::endl;
 }
 
@@ -354,4 +338,87 @@ void Yolov8_detector::nms_sorted_bboxes(const std::vector<Object>& proposals,
         if (keep)
             picked.push_back(i);
     }
+}
+
+void Yolov8_detector::post_process_gpu(cv::Mat& img)
+{
+    /* transpose */
+    transposeDevice(batchsize,
+        static_cast<float*>(device_buffers[output_index]), output_bbox_num, output_c, output_c * output_bbox_num,
+        device_output_transpose, output_c, output_bbox_num);
+    /* decode */
+    decodeDevice(batchsize, num_classes, topK, conf_thresh,
+        device_output_transpose, output_c, output_bbox_num, output_c * output_bbox_num,
+        device_output_objects, output_objects_width, topK);
+
+#if 0 /* valid */
+    {
+        float* phost = new float[batchsize * (1 + output_objects_width * topK)];
+        float* pdevice = device_output_objects;
+        CHECK(cudaMemcpy(phost, pdevice,
+            sizeof(float) * (1 + output_objects_width * topK), cudaMemcpyDeviceToHost));
+        int num_candidates = phost[0];
+        cv::Mat prediction(topK, output_objects_width, CV_32FC1, phost + 1);
+        delete[] phost;
+    }
+#endif
+
+    /* nms */
+    // nmsDeviceV1(batchsize, topK, nms_thresh,
+    //     device_output_objects, output_objects_width, topK, topK * output_objects_width + 1);
+
+    /* nms with sort */
+    nmsDeviceV2(batchsize, topK, nms_thresh,
+        device_output_objects, output_objects_width, topK, topK * output_objects_width + 1,
+        device_output_idx, device_output_conf);
+
+    /* copy result from gpu to cpu */
+    CHECK(cudaMemcpyAsync(host_output, device_output_objects,
+                batchsize * sizeof(float) * (1 + output_objects_width * topK),
+                cudaMemcpyDeviceToHost, stream));
+    CHECK(cudaStreamSynchronize(stream));
+
+    float width = img.cols;
+    float height = img.rows;
+    float x_scale = input_w / (img.cols*1.0);
+    float y_scale = input_h / (img.rows*1.0);
+    float scale = std::min(input_w / (width*1.0), input_h / (height*1.0));
+    std::vector<Object> objects;
+    /* transform to source image coordinate */
+    int num_boxes = std::min((int)(host_output + 0 * (topK * output_objects_width + 1))[0], topK);
+    std::cout << "num_boxes: " << num_boxes << std::endl;
+    for (size_t i = 0; i < num_boxes; i++)
+    {
+        float* ptr = host_output + 0 * (topK * output_objects_width + 1) + output_objects_width * i + 1;
+        int keep_flag = ptr[6];
+        if (keep_flag)
+        {
+            float x_lt = d2i[0] * ptr[0] + d2i[1] * ptr[1] + d2i[2]; // left & top
+            float y_lt = d2i[3] * ptr[0] + d2i[4] * ptr[1] + d2i[5];
+            float x_rb = d2i[0] * ptr[2] + d2i[1] * ptr[3] + d2i[2]; // right & bottom
+            float y_rb = d2i[3] * ptr[2] + d2i[4] * ptr[3] + d2i[5];
+
+            Object obj;
+            obj.rect.x = x_lt;
+            obj.rect.y = y_lt;
+            obj.rect.width  = x_rb - x_lt;
+            obj.rect.height = y_rb - y_lt;
+            obj.score = ptr[4];
+            obj.label = ptr[5];
+            objects.push_back(obj);
+
+            std::cout << "x1:" << x_lt
+                    << ", y1:" << y_lt
+                    << ", x2:" << x_rb
+                    << ", y2:" << y_rb
+                    << ", score:" << obj.score
+                    << ", label:" << obj.label
+                    << std::endl;
+            // std::string label = _object_classes[obj.label];
+            cv::rectangle(img, cv::Point(x_lt, y_lt), cv::Point(x_rb, y_rb),
+                        cv::Scalar(0, 0, 255), 2, 8, 0);
+        }
+    }
+
+    draw_objects(img, objects);
 }
