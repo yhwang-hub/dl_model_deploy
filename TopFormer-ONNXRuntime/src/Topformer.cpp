@@ -71,8 +71,7 @@ void Topformer_detector::pre_process(cv::Mat img)
 		{
 			for (int j = 0; j < col; j++)
 			{
-				// float pix = dstimg.ptr<uchar>(i)[j * 3 + c];
-				float pix = (float)dstimg.at<cv::Vec3b>(i, j)[c];
+				float pix = dstimg.ptr<uchar>(i)[j * 3 + c];
 				this->input_image_[c * row * col + i * col + j] = \
 						((pix / 255.0) - this->img_mean[c]) / this->img_std[c];
 			}
@@ -93,7 +92,8 @@ void Topformer_detector::do_detection(cv::Mat& img)
 		ort_session->Run(Ort::RunOptions{ nullptr }, &input_names[0], &input_tensor_, 1, 
 					output_names.data(), output_names.size());
 
-	output_tensor = ort_outputs.at(0).GetTensorMutableData<float>();
+	Ort::Value &predictions = ort_outputs.at(0);
+	output_tensor = predictions.GetTensorMutableData<float>();
 	post_process(img);
 }
 
@@ -139,7 +139,6 @@ void Topformer_detector::post_process(cv::Mat& img)
 
     cv::warpAffine(output_prob, output_prob, m2x3_d2i, img.size(), cv::INTER_LINEAR);
     cv::warpAffine(output_index, output_index, m2x3_d2i, img.size(), cv::INTER_LINEAR);
-	// cv::resize(output_index, output_index, cv::Size(img_w, img_h), 0, 0, cv::INTER_LINEAR);
 
 	for (int i = 0; i < img_h; i++)
     {

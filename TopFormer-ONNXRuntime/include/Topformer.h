@@ -34,6 +34,7 @@ private:
 	float confThreshold;
 	float nmsThreshold;
 	std::vector<float> input_image_;
+	float* host_input;
 	void normalize_(cv::Mat img);
 
 	Ort::Env env = Ort::Env(ORT_LOGGING_LEVEL_ERROR, "TopFormer");
