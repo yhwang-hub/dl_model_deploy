@@ -54,6 +54,7 @@ public:
     Yolox_Detector(const std::string& _engine_file);
     virtual ~Yolox_Detector();
     virtual void do_detection(cv::Mat& img);
+    std::vector<Object> getDetectResults() { return objects; };
 
 private:
     float* host_input;
@@ -82,6 +83,8 @@ private:
     std::vector<void*> hostOutputBuffer;
     cv::cuda::Stream _gpu_stream;
     cv::cuda::GpuMat _img_gpu;
+
+    std::vector<Object> objects;
 
     void init_context();
     void destroy_context();

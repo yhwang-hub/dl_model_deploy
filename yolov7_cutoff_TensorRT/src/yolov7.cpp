@@ -178,6 +178,7 @@ void Yolov7_Detector::post_process(cv::Mat& img)
     {
         PERCEPTION_CUDA_CHECK(cudaMemcpyAsync(det_output_cpu[stride], device_buffers[det_output_index[stride]],
                     det_output_buffer_size[stride], cudaMemcpyDeviceToHost, stream));
+        cudaStreamSynchronize(stream);
 
         int num_grid_x = (int)(input_w / strides[stride]);
         int num_grid_y = (int)(input_h / strides[stride]);
@@ -250,7 +251,6 @@ void Yolov7_Detector::post_process(cv::Mat& img)
             }
         }
     }
-    cudaStreamSynchronize(stream);
 
     auto end_generate = std::chrono::system_clock::now();
     std::cout<<"generate proposal time:"<<std::chrono::duration_cast<std::chrono::milliseconds>(end_generate - start_generate).count()<<" ms"<<std::endl;
@@ -291,8 +291,8 @@ void Yolov7_Detector::post_process(cv::Mat& img)
     auto end_analysis = std::chrono::system_clock::now();
     std::cout<<"analysis time:"<<std::chrono::duration_cast<std::chrono::microseconds>(end_analysis - start_analysis).count()<<" us"<<std::endl;
 
-    auto start_draw = std::chrono::system_clock::now();
-    draw_objects(img, objects);
-    auto end_draw = std::chrono::system_clock::now();
-    std::cout<<"draw_time:"<<std::chrono::duration_cast<std::chrono::milliseconds>(end_draw - start_draw).count()<<" ms"<<std::endl;
+    // auto start_draw = std::chrono::system_clock::now();
+    // draw_objects(img, objects);
+    // auto end_draw = std::chrono::system_clock::now();
+    // std::cout<<"draw_time:"<<std::chrono::duration_cast<std::chrono::milliseconds>(end_draw - start_draw).count()<<" ms"<<std::endl;
 }

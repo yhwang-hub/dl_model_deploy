@@ -30,6 +30,7 @@ public:
     virtual void do_inference(cv::Mat& image,
                             cv::Mat& dst,
                             std::string input_image_path);
+    std::vector<Object> getDetectResults() { return objects; };
 
 private:
     /* data */
@@ -59,6 +60,8 @@ private:
         /* name,         bufferIndex */
         { output,             -1      }
     };
+
+    std::vector<Object> objects;
 
     bool init_done  =false;
 

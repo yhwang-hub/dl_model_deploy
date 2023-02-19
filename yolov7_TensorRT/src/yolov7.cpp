@@ -340,10 +340,9 @@ void yolov7_trt::do_inference(cv::Mat& image,
     Tensorrt_output.close();
 #endif
 
-    std::vector<Object> objects;
     float scale = std::min(INPUT_W / (dst.cols*1.0), INPUT_H / (dst.rows*1.0));
     int img_w = dst.cols;
     int img_h = dst.rows;
     decode_outputs(static_cast<float*>(host_output), output_bufsize / sizeof(float), objects, scale, img_w, img_h);
-    draw_objects(dst, objects, input_image_path);
+    // draw_objects(dst, objects, input_image_path);
 }

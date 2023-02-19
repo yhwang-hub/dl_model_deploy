@@ -305,7 +305,6 @@ void Yolox_Detector::nms_sorted_bboxes(const std::vector<Object>& proposals,
 void Yolox_Detector::post_process_cpu(cv::Mat& image)
 {
     /* Store detection results */
-    std::vector<Object> objects;
     std::vector<Box> det_objs;
 
     float scale = min(input_w / (image.cols*1.0), input_h / (image.rows*1.0));
@@ -319,6 +318,7 @@ void Yolox_Detector::post_process_cpu(cv::Mat& image)
                                         det_output_obj_buffer_size[stride], cudaMemcpyDeviceToHost, stream));
         PERCEPTION_CUDA_CHECK(cudaMemcpyAsync((det_output_bbox_cpu[stride]), device_buffers[det_output_bbox_index[stride]],
                                         det_output_bbox_buffer_size[stride], cudaMemcpyDeviceToHost, stream));
+        cudaStreamSynchronize(stream);
 
         int num_grid_x = (int) (input_h) / strides[stride];
         int num_grid_y = (int) (input_w) / strides[stride];
@@ -377,7 +377,6 @@ void Yolox_Detector::post_process_cpu(cv::Mat& image)
             }
         }
     }
-    cudaStreamSynchronize(stream);
 
     std::cout<<"Num of proposals: "<< proposals.size() <<std::endl;
     
@@ -418,13 +417,12 @@ void Yolox_Detector::post_process_cpu(cv::Mat& image)
         // cv::putText(image, label, cv::Point2d(x1 + 5, y1 + 5),
         //                 cv::FONT_HERSHEY_PLAIN, 1.0, cv::Scalar(0, 0, 255), 2);
     }
-    draw_objects(image, objects);
+    // draw_objects(image, objects);
 }
 
 void Yolox_Detector::post_process_gpu1(cv::Mat& image)
 {
     /* Store detection results */
-    std::vector<Object> objects;
     std::vector<Box> det_objs;
 
     float scale = min(input_w / (image.cols*1.0), input_h / (image.rows*1.0));
@@ -515,13 +513,12 @@ void Yolox_Detector::post_process_gpu1(cv::Mat& image)
         float x2 = x1 + obj.rect.width;
         float y2 = y1 + obj.rect.height;
     }
-    draw_objects(image, objects);
+    // draw_objects(image, objects);
 }
 
 void Yolox_Detector::post_process_gpu2(cv::Mat& image)
 {
     float scale = min(input_w / (image.cols*1.0), input_h / (image.rows*1.0));
-    std::vector<Object> objects;
     std::vector<Box>box_result;
     float* output_device = nullptr;
     float* output_host = nullptr;
@@ -574,5 +571,5 @@ void Yolox_Detector::post_process_gpu2(cv::Mat& image)
         objects.push_back(obj);
     }
     // cv::imwrite("det_res.jpg", image);
-    draw_objects(image, objects);
+    // draw_objects(image, objects);
 }
