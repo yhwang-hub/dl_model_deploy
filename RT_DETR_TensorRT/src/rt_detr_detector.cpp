@@ -129,8 +129,8 @@ void rt_detr_detector::pre_process_cpu(cv::Mat image)
     cv::invertAffineTransform(m2x3_i2d, m2x3_d2i);  // 计算一个反仿射变换
 
     cv::Mat input_image(input_h, input_w, CV_8UC3);
-    // cv::resize(image, input_image, input_image.size());
-    cv::warpAffine(image, input_image, m2x3_i2d, input_image.size(), \
+    cv::resize(image, input_image, input_image.size());
+    // cv::warpAffine(image, input_image, m2x3_i2d, input_image.size(), \
         cv::INTER_LINEAR, cv::BORDER_CONSTANT, cv::Scalar::all(114));  // 对图像做平移缩放旋转变换,可逆
 
     std::cout<< "input_image shape: [" << input_image.cols << ", " << input_image.rows << "]"<<std::endl;
