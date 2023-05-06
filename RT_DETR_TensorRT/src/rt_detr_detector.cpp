@@ -212,10 +212,10 @@ void rt_detr_detector::post_process_cpu(cv::Mat& img)
         float right  = x_center + w * 0.5f;
         float bottom = y_center + h * 0.5f;
 
-        float image_base_left   = left * (input_w / scale);
-        float image_base_top    = top * (input_w / scale);
-        float image_base_right  = right * (input_w / scale);
-        float image_base_bottom = bottom * (input_w / scale);
+        float image_base_left   = left * (input_w / ratio_w);
+        float image_base_top    = top * (input_w / ratio_h);
+        float image_base_right  = right * (input_w / ratio_w);
+        float image_base_bottom = bottom * (input_w / ratio_h);
 
         /* clip */
         image_base_left = std::min(std::max(0.0f, image_base_left), float(img.cols - 1));
