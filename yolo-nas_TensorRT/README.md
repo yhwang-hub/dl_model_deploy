@@ -27,5 +27,7 @@ make
 ```
 
 # Result
+## Pytorch inference result:
 ![image](https://github.com/yhwang-hub/dl_model_deploy/blob/master/yolo-nas_TensorRT/pred_0.jpg)
+## TensorRT inference result:
 ![image](https://github.com/yhwang-hub/dl_model_deploy/blob/master/yolo-nas_TensorRT/yolo_nas_result.jpg)
